@@ -161,10 +161,7 @@ scene.add(ring);
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let launchInProgress = false;
-let selectedPlanet = null;$ports = 2343,2344,2345,2346,2347,2350,8788
-foreach($p in $ports){
-  New-NetFirewallRule -DisplayName "PhotoPrism-$p-LAN" -Direction Inbound -Protocol TCP -LocalPort $p -Action Allow -Profile Private -ErrorAction SilentlyContinue
-}
+let selectedPlanet = null;
 let lastHitLocal = null; // for Photos polar routing
 const mercuryMenu = document.getElementById('mercury-menu');
 const closeBtn = mercuryMenu ? mercuryMenu.querySelector('.close') : null;
