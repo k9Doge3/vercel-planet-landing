@@ -16,6 +16,22 @@
   window.ANNOY_TOKEN = 'Ky-Annoy-Token-2025-1104'; // set to your NOTIFY_TOKEN value
       window.DISCORD_URL = 'https://discord.gg/GrA7uQkUTE';
     </script>
+    <script>
+      // Basic WebGL support check – shows a helpful status if disabled
+      (function(){
+        try {
+          const c = document.createElement('canvas');
+          const ok = !!(c.getContext && (c.getContext('webgl') || c.getContext('experimental-webgl')));
+          if (!ok) {
+            var el = document.getElementById('sun-status');
+            if (el) el.textContent = 'WebGL not available — try a different browser or device.';
+          }
+        } catch (e) {
+          var el = document.getElementById('sun-status');
+          if (el) el.textContent = 'Graphics init error — please refresh or try another browser.';
+        }
+      })();
+    </script>
     <div id="ui">
       <h1>Choose Your Planet</h1>
       <p>Click a planet to launch 🚀 — or pick options where offered</p>
@@ -34,6 +50,6 @@
         <button class="link close">Close</button>
       </div>
     </div>
-    <script type="module" src="./main.js"></script>
+    <script type="module" src="./main.js" crossorigin="anonymous"></script>
   </body>
 </html>
