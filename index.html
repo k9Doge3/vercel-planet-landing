@@ -10,11 +10,30 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <script>
+      // Simple client-side config; update these in deploy without changing main.js
+      window.STATUS_BASE = 'https://status.kylife.ca';
+  window.ANNOY_TOKEN = 'Ky-Annoy-Token-2025-1104'; // set to your NOTIFY_TOKEN value
+      window.DISCORD_URL = 'https://discord.gg/GrA7uQkUTE';
+    </script>
     <div id="ui">
       <h1>Choose Your Planet</h1>
-      <p>Click Mercury to launch 🚀 and enter the Gallery</p>
+      <p>Click a planet to launch 🚀 — or pick options where offered</p>
+      <div id="sun-status" aria-live="polite">Sun: awaiting status…</div>
+      <button id="annoy" class="btn tiny" title="Send a nudge">Annoy me 🔔</button>
+      <span id="annoy-result" class="muted"></span>
     </div>
     <canvas id="scene"></canvas>
+    <div id="mercury-menu" class="menu hidden">
+      <div class="menu-card">
+        <h2>Mercury (Laptop)</h2>
+        <p>Where do you want to go?</p>
+        <div class="menu-actions">
+          <a href="https://www.kygroup.ca" class="btn">KY Group</a>
+        </div>
+        <button class="link close">Close</button>
+      </div>
+    </div>
     <script type="module" src="./main.js"></script>
   </body>
 </html>

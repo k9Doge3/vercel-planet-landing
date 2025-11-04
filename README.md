@@ -22,6 +22,7 @@ Open `index.html` directly, or serve the folder with any static server.
 - Attach `www.kylife.ca` (and `kylife.ca` if desired)
 
 ## Customization
-- Redirect target: change the URL in `main.js` inside `setTimeout(() => window.location.href = 'https://gallery.kylife.ca', 1800)`
-- Explosion look: tweak fragment count, size, and colors
-- Add audio: play a short sound on click/impact (user gesture required)
+- Planet links: edit the `addPlanet` calls in `main.js` to change positions, colors, and target URLs
+- Redirect timing: change the 1800ms timeout in `explode()`
+- Explosion look: tweak fragment count, size, and colors (MAX_PARTS, geometry)
+- Audio: adjust synth in `playLaunch()` and `playExplosion()` (WebAudio, no assets)

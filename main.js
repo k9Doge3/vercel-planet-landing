@@ -34,6 +34,14 @@ const dir = new THREE.DirectionalLight(0xffffff, 1.1);
 dir.position.set(10, 20, 10);
 scene.add(dir);
 
+// Sun (central star) with subtle pulse
+const sunGeo = new THREE.SphereGeometry(7.5, 48, 48);
+const sunMat = new THREE.MeshBasicMaterial({ color: 0xffe08a });
+const sun = new THREE.Mesh(sunGeo, sunMat);
+sun.position.set(0, 0, -40);
+scene.add(sun);
+let sunPulse = 0;
+
 // Stars background
 function makeStars(count = 1200, radius = 500) {
   const geom = new THREE.BufferGeometry();
@@ -54,24 +62,92 @@ function makeStars(count = 1200, radius = 500) {
 }
 makeStars();
 
-// Create a stylized Mercury (procedural look)
-function createMercury() {
-  const radius = 4.0;
+// WebAudio simple SFX (no external assets)
+let audioCtx;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function playLaunch() {
+  ensureAudio();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sawtooth';
+  const now = audioCtx.currentTime;
+  o.frequency.setValueAtTime(180, now);
+  o.frequency.exponentialRampToValueAtTime(540, now + 0.4);
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.12, now + 0.05);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+  o.connect(g).connect(audioCtx.destination);
+  o.start();
+  o.stop(now + 0.5);
+}
+function playExplosion() {
+  ensureAudio();
+  const dur = 0.5;
+  const len = audioCtx.sampleRate * dur;
+  const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    // White noise with exponential decay
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-3 * i / len);
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const g = audioCtx.createGain();
+  g.gain.value = 0.6;
+  src.connect(g).connect(audioCtx.destination);
+  src.start();
+}
+
+// Create planets (Mercury, Venus, Earth, Mars) with target URLs
+const planets = [];
+function addPlanet({ name, radius, color, position, url }) {
   const geo = new THREE.IcosahedronGeometry(radius, 5);
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x9a9a9a,
-    roughness: 0.9,
-    metalness: 0.05,
-    flatShading: true,
-  });
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.06, flatShading: true });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.name = 'Mercury';
-  mesh.position.set(0, 0, 0);
+  mesh.name = name;
+  mesh.position.copy(position);
+  mesh.userData.url = url;
   scene.add(mesh);
+  planets.push(mesh);
   return mesh;
 }
 
-const mercury = createMercury();
+const mercury = addPlanet({
+  name: 'Mercury',
+  radius: 4.0,
+  color: 0x9a9a9a,
+  position: new THREE.Vector3(0, 0, 0),
+  url: null // opens a menu instead of direct redirect
+});
+const venus = addPlanet({
+  name: 'Venus',
+  radius: 4.6,
+  color: 0xd9a066,
+  position: new THREE.Vector3(12, -1, -6),
+  url: 'https://friends.kylife.ca'
+});
+const photos = addPlanet({
+  name: 'Photos',
+  radius: 4.8,
+  color: 0x4da3ff,
+  position: new THREE.Vector3(-13, 1, -7),
+  url: 'https://gallery.kylife.ca'
+});
+const mars = addPlanet({
+  name: 'Mars',
+  radius: 4.2,
+  color: 0xd35442,
+  position: new THREE.Vector3(8, 0.5, 11),
+  url: 'https://www.kylife.ca/gaming'
+});
+
+// Draft planets
+const games = addPlanet({ name: 'Games', radius: 3.8, color: 0x6bd06b, position: new THREE.Vector3(-6, -2, 15), url: 'https://www.kylife.ca/games' });
+const calendar = addPlanet({ name: 'Calendar', radius: 3.8, color: 0xffb86b, position: new THREE.Vector3(16, 2, 4), url: 'https://www.kylife.ca/calendar' });
+// Re-purpose Forum as HRM / Client Manager hosted on a separate server
+const hrm = addPlanet({ name: 'HRM', radius: 3.8, color: 0x9a7dff, position: new THREE.Vector3(-18, -0.5, 3), url: 'https://hrm.kylife.ca' });
 
 // Ground / reference ring
 const ringGeo = new THREE.RingGeometry(6, 6.4, 64);
@@ -85,6 +161,14 @@ scene.add(ring);
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 let launchInProgress = false;
+let selectedPlanet = null;$ports = 2343,2344,2345,2346,2347,2350,8788
+foreach($p in $ports){
+  New-NetFirewallRule -DisplayName "PhotoPrism-$p-LAN" -Direction Inbound -Protocol TCP -LocalPort $p -Action Allow -Profile Private -ErrorAction SilentlyContinue
+}
+let lastHitLocal = null; // for Photos polar routing
+const mercuryMenu = document.getElementById('mercury-menu');
+const closeBtn = mercuryMenu ? mercuryMenu.querySelector('.close') : null;
+if (closeBtn) closeBtn.addEventListener('click', () => mercuryMenu.classList.add('hidden'));
 
 // Rocket parts
 function createRocket() {
@@ -154,24 +238,41 @@ function onClick(e) {
   mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
   mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
-  const hits = raycaster.intersectObject(mercury, true);
+  const hits = raycaster.intersectObjects(planets, true);
   if (hits.length) {
+    selectedPlanet = hits[0].object;
+
+    // Special case: Mercury opens a choice menu (no rocket)
+    if (selectedPlanet.name === 'Mercury') {
+      if (mercuryMenu) mercuryMenu.classList.remove('hidden');
+      return;
+    }
+
+    // Remember local point for Photos to decide region (poles vs equator)
+    if (selectedPlanet.name === 'Photos') {
+      const inv = new THREE.Matrix4().copy(selectedPlanet.matrixWorld).invert();
+      lastHitLocal = hits[0].point.clone().applyMatrix4(inv);
+    } else {
+      lastHitLocal = null;
+    }
+
     // Start rocket from off-screen left-bottom
     rocket.position.set(-18, -10, 0);
-    rocket.lookAt(mercury.position);
+    rocket.lookAt(selectedPlanet.position);
     rocket.visible = true;
-    targetPos.copy(mercury.position);
+    targetPos.copy(selectedPlanet.position);
 
     const dir = new THREE.Vector3().subVectors(targetPos, rocket.position).normalize();
     rocketVel.copy(dir).multiplyScalar(0.28);
     launchInProgress = true;
+    playLaunch();
   }
 }
 canvas.addEventListener('pointerdown', onClick);
 
 function explode(center) {
   // Hide Mercury and emit fragments
-  mercury.visible = false;
+  if (selectedPlanet) selectedPlanet.visible = false;
   fragments.visible = true;
 
   // Distribute fragments on sphere around center with random velocities
@@ -190,10 +291,25 @@ function explode(center) {
   fragments.instanceMatrix.needsUpdate = true;
   exploding = true;
   explosionTime = 0;
+  playExplosion();
 
   // Redirect after a short cinematic pause
-  setTimeout(() => {
-    window.location.href = 'https://gallery.kylife.ca';
+    setTimeout(() => {
+    let url = (selectedPlanet && selectedPlanet.userData.url) || 'https://gallery.kylife.ca';
+    if (selectedPlanet && selectedPlanet.name === 'Photos' && lastHitLocal) {
+      const r = selectedPlanet.geometry.boundingSphere ? selectedPlanet.geometry.boundingSphere.radius : 4.8;
+      const y = THREE.MathUtils.clamp(lastHitLocal.y / r, -1, 1);
+      const deg = THREE.MathUtils.radToDeg(Math.asin(y));
+      if (deg > 35) {
+        url = 'https://friends.kylife.ca'; // north pole
+      } else if (deg < -35) {
+        // south pole: family instance
+        url = 'https://family.kylife.ca';
+      } else {
+        url = 'https://gallery.kylife.ca';
+      }
+    }
+    window.location.href = url;
   }, 1800);
 }
 
@@ -202,9 +318,9 @@ const clock = new THREE.Clock();
 function animate() {
   const dt = Math.min(0.033, clock.getDelta());
 
-  // Idle spin for Mercury
-  if (mercury.visible) {
-    mercury.rotation.y += dt * 0.4;
+  // Idle spin for planets
+  for (const p of planets) {
+    if (p.visible) p.rotation.y += dt * 0.4;
   }
 
   // Rocket motion
@@ -255,7 +371,56 @@ function animate() {
   }
 
   controls.update();
+  // Sun pulse glow
+  sunPulse += dt;
+  const intensity = 0.9 + Math.sin(sunPulse * 1.5) * 0.1;
+  sun.material.color.setHSL(0.12, 0.9, intensity);
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
 animate();
+
+// Optional: poll a status endpoint for Sun (desktop) metrics
+const statusEl = document.getElementById('sun-status');
+async function pollStatus() {
+  if (!statusEl) return;
+  try {
+    const base = window.STATUS_BASE || 'https://status.kylife.ca';
+    const res = await fetch(base + '/metrics', { cache: 'no-store' });
+    if (!res.ok) throw new Error('bad status');
+    const j = await res.json();
+    statusEl.textContent = `Sun: CPU ${j.cpu}% • RAM ${j.memUsed}/${j.memTotal} • Uptime ${j.uptime}`;
+  } catch (e) {
+    statusEl.textContent = 'Sun: status offline';
+  }
+}
+pollStatus();
+setInterval(pollStatus, 5000);
+
+// Annoy-me button
+const annoyBtn = document.getElementById('annoy');
+const annoyRes = document.getElementById('annoy-result');
+if (annoyBtn) {
+  annoyBtn.addEventListener('click', async () => {
+    annoyBtn.disabled = true;
+    annoyRes.textContent = 'sending…';
+    try {
+      const base = window.STATUS_BASE || 'https://status.kylife.ca';
+      const token = window.ANNOY_TOKEN || 'CHANGE_ME_SECRET';
+      const res = await fetch(base + '/notify?token=' + encodeURIComponent(token) + '&reason=annoy', { method: 'POST' });
+      if (res.ok) {
+        annoyRes.textContent = 'pinged!';
+        const discordUrl = window.DISCORD_URL;
+        if (discordUrl) {
+          setTimeout(() => { window.location.href = discordUrl; }, 600);
+        }
+      } else {
+        annoyRes.textContent = 'failed';
+      }
+    } catch {
+      annoyRes.textContent = 'offline';
+    } finally {
+      setTimeout(() => { annoyRes.textContent = ''; annoyBtn.disabled = false; }, 2000);
+    }
+  });
+}
