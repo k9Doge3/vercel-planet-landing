@@ -39,6 +39,7 @@ scene.add(dir);
 const sunGeo = new THREE.SphereGeometry(7.5, 48, 48);
 const sunMat = new THREE.MeshBasicMaterial({ color: 0xffe08a });
 const sun = new THREE.Mesh(sunGeo, sunMat);
+sun.name = 'Sun';
 sun.position.set(0, 0, -40);
 scene.add(sun);
 let sunPulse = 0;
@@ -137,7 +138,7 @@ const photos = addPlanet({
   url: 'https://gallery.kylife.ca'
 });
 const mars = addPlanet({
-  name: 'Mars',
+  name: 'Mars',c
   radius: 4.2,
   color: 0xd35442,
   position: new THREE.Vector3(8, 0.5, 11),
@@ -146,7 +147,7 @@ const mars = addPlanet({
 
 // Draft planets
 const games = addPlanet({ name: 'Games', radius: 3.8, color: 0x6bd06b, position: new THREE.Vector3(-6, -2, 15), url: 'https://www.kylife.ca/games' });
-const calendar = addPlanet({ name: 'Calendar', radius: 3.8, color: 0xffb86b, position: new THREE.Vector3(16, 2, 4), url: 'https://www.kylife.ca/calendar' });
+const calendar = addPlanet({ name: 'Calendar', radius: 3.8, color: 0xffb86b, position: new THREE.Vector3(16, 2, 4), url: 'https://calendar.kylife.ca' });
 // Re-purpose Forum as HRM / Client Manager hosted on a separate server
 const hrm = addPlanet({ name: 'HRM', radius: 3.8, color: 0x9a7dff, position: new THREE.Vector3(-18, -0.5, 3), url: 'https://hrm.kylife.ca' });
 
@@ -157,6 +158,8 @@ const ring = new THREE.Mesh(ringGeo, ringMat);
 ring.rotation.x = -Math.PI / 2;
 ring.position.y = -4.2;
 scene.add(ring);
+
+const clickTargets = [...planets, sun];
 
 // Raycaster for clicking
 const raycaster = new THREE.Raycaster();
@@ -236,9 +239,15 @@ function onClick(e) {
   mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
   mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
-  const hits = raycaster.intersectObjects(planets, true);
+  const hits = raycaster.intersectObjects(clickTargets, true);
   if (hits.length) {
     selectedPlanet = hits[0].object;
+
+    // Sun: trigger wake action instead of rocket
+    if (selectedPlanet === sun || selectedPlanet.name === 'Sun') {
+      wakeLaptop();
+      return;
+    }
 
     // Special case: Mercury opens a choice menu (no rocket)
     if (selectedPlanet.name === 'Mercury') {
@@ -267,6 +276,16 @@ function onClick(e) {
   }
 }
 canvas.addEventListener('pointerdown', onClick);
+
+function onMove(e) {
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(clickTargets, true);
+  canvas.style.cursor = hits.length ? 'pointer' : 'default';
+}
+canvas.addEventListener('pointermove', onMove);
 
 function explode(center) {
   // Hide Mercury and emit fragments
@@ -394,6 +413,30 @@ async function pollStatus() {
 }
 pollStatus();
 setInterval(pollStatus, 5000);
+
+async function wakeLaptop() {
+  const statusEl = document.getElementById('sun-status');
+  const base = (window.WAKE_BASE || 'https://wake.kylife.ca').replace(/\/$/, '');
+  const token = window.WAKE_TOKEN || window.ANNOY_TOKEN || 'CHANGE_ME_SECRET';
+  const url = `${base}/wake?token=${encodeURIComponent(token)}`;
+
+  if (statusEl) statusEl.textContent = 'Sun: waking…';
+  try {
+    const res = await fetch(url, { method: 'GET' });
+    if (res.ok) {
+      if (statusEl) statusEl.textContent = 'Sun: wake ping sent';
+    } else {
+      if (statusEl) statusEl.textContent = 'Sun: wake failed';
+    }
+  } catch (e) {
+    // Fallback attempt without CORS (image GET)
+    try { const img = new Image(); img.src = url; } catch {}
+    if (statusEl) statusEl.textContent = 'Sun: wake attempted (no response)';
+  } finally {
+    // Refresh metrics shortly after
+    setTimeout(() => { try { pollStatus(); } catch {} }, 2500);
+  }
+}
 
 // Annoy-me button
 const annoyBtn = document.getElementById('annoy');
